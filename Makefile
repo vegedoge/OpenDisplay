@@ -2,7 +2,7 @@ APP_NAME  = OpenDisplay
 BUILD_DIR = build
 APP       = $(BUILD_DIR)/$(APP_NAME).app
 SWIFT_SRC = Sources/main.swift Sources/AppDelegate.swift Sources/DisplayManager.swift
-OBJC_OBJ  = $(BUILD_DIR)/VirtualDisplay.o $(BUILD_DIR)/CGSModeHelper.o $(BUILD_DIR)/BrightnessHelper.o
+OBJC_OBJ  = $(BUILD_DIR)/VirtualDisplay.o $(BUILD_DIR)/CGSModeHelper.o
 
 .PHONY: all run install clean
 
@@ -15,10 +15,6 @@ $(BUILD_DIR)/VirtualDisplay.o: Sources/VirtualDisplay.m Sources/VirtualDisplay.h
 $(BUILD_DIR)/CGSModeHelper.o: Sources/CGSModeHelper.m Sources/CGSModeHelper.h
 	@mkdir -p $(BUILD_DIR)
 	clang -c Sources/CGSModeHelper.m -o $@ -fobjc-arc -fmodules
-
-$(BUILD_DIR)/BrightnessHelper.o: Sources/BrightnessHelper.m Sources/BrightnessHelper.h
-	@mkdir -p $(BUILD_DIR)
-	clang -c Sources/BrightnessHelper.m -o $@ -fobjc-arc -fmodules
 
 $(APP): $(SWIFT_SRC) $(OBJC_OBJ) Resources/Info.plist
 	@mkdir -p "$(APP)/Contents/MacOS"

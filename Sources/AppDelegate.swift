@@ -108,33 +108,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resSub.submenu = resMenu
         menu.addItem(resSub)
 
-        // Brightness slider
-        if BrightnessHelper.isSupported(display.modeTargetID) {
-            let current = BrightnessHelper.getBrightness(display.modeTargetID)
-            if current >= 0 {
-                let sliderItem = NSMenuItem()
-                let container = NSView(frame: NSRect(x: 0, y: 0, width: 250, height: 30))
-
-                let icon = NSImageView(frame: NSRect(x: 12, y: 5, width: 18, height: 18))
-                icon.image = NSImage(systemSymbolName: "sun.max", accessibilityDescription: "亮度")
-                icon.contentTintColor = .secondaryLabelColor
-                container.addSubview(icon)
-
-                let slider = NSSlider(frame: NSRect(x: 34, y: 5, width: 196, height: 20))
-                slider.minValue = 0
-                slider.maxValue = 1
-                slider.doubleValue = current
-                slider.target = self
-                slider.action = #selector(onBrightnessChanged(_:))
-                slider.tag = Int(display.modeTargetID)
-                slider.isContinuous = true
-                container.addSubview(slider)
-
-                sliderItem.view = container
-                menu.addItem(sliderItem)
-            }
-        }
-
         // HiDPI toggle — simple checkmark: ✓ = on
         if dm.isHiDPIAvailable {
             let enabled = dm.isHiDPIEnabled(for: display.physicalID)
@@ -158,11 +131,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: Actions
-
-    @objc private func onBrightnessChanged(_ sender: NSSlider) {
-        let displayID = CGDirectDisplayID(sender.tag)
-        BrightnessHelper.setBrightness(displayID, value: sender.doubleValue)
-    }
 
     @objc private func onSwitchMode(_ sender: NSMenuItem) {
         guard let action = sender.representedObject as? ModeAction else { return }

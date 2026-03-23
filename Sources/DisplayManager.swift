@@ -47,6 +47,19 @@ class DisplayInfo {
 
 class DisplayManager {
 
+    // MARK: Mode Cache (avoid re-enumerating 160+ modes on every menu open)
+    private var modeCache: [CGDirectDisplayID: [DisplayMode]] = [:]
+    private var modeCacheDirty = true
+
+    init() {
+        // Invalidate cache when display config changes
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            self?.modeCacheDirty = true
+            self?.modeCache.removeAll()
+        }
+    }
+
     // MARK: Enumeration
 
     func getActiveDisplays() -> [DisplayInfo] {
@@ -102,6 +115,12 @@ class DisplayManager {
     }
 
     private func displayModes(for id: CGDirectDisplayID) -> (current: DisplayMode?, all: [DisplayMode]) {
+        // Use cached modes if available
+        if let cached = modeCache[id] {
+            let current = currentMode(for: id)
+            return (current, cached)
+        }
+
         let cgsModes = CGSModeHelper.modes(forDisplay: id)
 
         // Dedup by (width, height, isHiDPI, hz)
@@ -123,16 +142,17 @@ class DisplayManager {
             return a.refreshRate > b.refreshRate
         }
 
-        // Current mode from public API
-        var current: DisplayMode?
-        if let cg = CGDisplayCopyDisplayMode(id) {
-            let isHiDPI = cg.pixelWidth > cg.width
-            let hz = Int(cg.refreshRate.rounded())
-            current = DisplayMode(width: cg.width, height: cg.height,
-                                  refreshRate: hz, isHiDPI: isHiDPI, modeNumber: -1)
-        }
-
+        modeCache[id] = sorted
+        let current = currentMode(for: id)
         return (current, sorted)
+    }
+
+    private func currentMode(for id: CGDirectDisplayID) -> DisplayMode? {
+        guard let cg = CGDisplayCopyDisplayMode(id) else { return nil }
+        let isHiDPI = cg.pixelWidth > cg.width
+        let hz = Int(cg.refreshRate.rounded())
+        return DisplayMode(width: cg.width, height: cg.height,
+                           refreshRate: hz, isHiDPI: isHiDPI, modeNumber: -1)
     }
 
     // MARK: Mode Switching
