@@ -27,13 +27,6 @@ make run      # build and run
 make clean    # clean build
 ```
 
-## How it works
-
-**HiDPI**: Creates a high-resolution virtual display (CGVirtualDisplay private API) and mirrors the physical display to it. macOS renders at 2x resolution on the virtual display, then scales down to the physical display. This gives Retina-quality text on non-Retina screens.
-
-**Mode switching**: Uses `CGSGetNumberOfDisplayModes` / `CGSConfigureDisplayMode` private APIs to enumerate and switch display modes, including HiDPI variants that `CGDisplayCopyAllDisplayModes` no longer returns on macOS 26.
-
-**Display control**: Uses `CGDisplayCapture` / `CGDisplayRelease` public APIs to enable/disable displays.
 
 ## Privacy
 

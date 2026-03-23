@@ -27,13 +27,6 @@ make run      # 编译并运行
 make clean    # 清理
 ```
 
-## 工作原理
-
-**HiDPI**：通过 CGVirtualDisplay 私有 API 创建高分辨率虚拟显示器，并将物理显示器镜像到虚拟显示器。macOS 以 2 倍分辨率渲染到虚拟显示器，再缩放输出到物理屏幕，从而在非 Retina 屏上获得 Retina 级文字清晰度。
-
-**模式切换**：使用 `CGSGetNumberOfDisplayModes` / `CGSConfigureDisplayMode` 私有 API 枚举和切换显示模式。macOS 26 上 `CGDisplayCopyAllDisplayModes` 公开 API 已不再返回 HiDPI 模式，本项目通过逆向 CGS 结构体布局解决了这一问题。
-
-**显示器控制**：使用 `CGDisplayCapture` / `CGDisplayRelease` 公开 API 实现显示器的启用和禁用。
 
 ## 隐私
 
