@@ -189,6 +189,30 @@ class DisplayManager {
         CGSModeHelper.switchDisplay(displayID, toMode: modeNumber)
     }
 
+    // MARK: Set Main Display
+
+    func setMainDisplay(_ displayID: CGDirectDisplayID) {
+        // Main display = origin (0,0). Move target to (0,0) and shift others.
+        let targetBounds = CGDisplayBounds(displayID)
+
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &ids, &count)
+
+        var config: CGDisplayConfigRef?
+        guard CGBeginDisplayConfiguration(&config) == .success else { return }
+
+        for id in ids {
+            let bounds = CGDisplayBounds(id)
+            let newX = Int32(bounds.origin.x - targetBounds.origin.x)
+            let newY = Int32(bounds.origin.y - targetBounds.origin.y)
+            CGConfigureDisplayOrigin(config, id, newX, newY)
+        }
+
+        CGCompleteDisplayConfiguration(config, .permanently)
+    }
+
     // MARK: Display Enable / Disable (using public CGDisplayCapture API)
 
     func setDisplayEnabled(_ displayID: CGDirectDisplayID, enabled: Bool) -> Bool {

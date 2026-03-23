@@ -121,6 +121,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(hidpiItem)
         }
 
+        // Set as main display (only show for non-main when multiple displays)
+        if !display.isMain && totalActive > 1 {
+            let mainItem = NSMenuItem(title: "  设为主显示器", action: #selector(onSetMainDisplay(_:)), keyEquivalent: "")
+            mainItem.target = self
+            mainItem.representedObject = display
+            menu.addItem(mainItem)
+        }
+
         // Disable display
         if totalActive > 1 && dm.canControlDisplayPower {
             let disableItem = NSMenuItem(title: "  关闭此显示器", action: #selector(onDisableDisplay(_:)), keyEquivalent: "")
@@ -131,6 +139,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: Actions
+
+    @objc private func onSetMainDisplay(_ sender: NSMenuItem) {
+        guard let display = sender.representedObject as? DisplayInfo else { return }
+        dm.setMainDisplay(display.modeTargetID)
+    }
 
     @objc private func onSwitchMode(_ sender: NSMenuItem) {
         guard let action = sender.representedObject as? ModeAction else { return }
