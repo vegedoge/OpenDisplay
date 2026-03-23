@@ -42,6 +42,10 @@ make clean    # clean build
 - No sensitive data stored (only display vendor/product IDs and mode numbers in UserDefaults)
 - No special permissions required
 
+## Disclaimer
+
+This project uses macOS private APIs (CGVirtualDisplay, CGS display mode functions) that are undocumented and may break in future macOS updates. The software is provided as-is, without warranty of any kind. It has not been exhaustively tested across all hardware configurations. Use at your own risk — display misconfiguration is generally recoverable by restarting your Mac, but the authors are not responsible for any issues that may arise.
+
 ## License
 
 MIT
