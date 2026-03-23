@@ -1,5 +1,7 @@
 # OpenDisplay
 
+[中文说明](README_CN.md)
+
 macOS menu bar tool for display management. Lightweight alternative to BetterDisplay focused on HiDPI and multi-monitor control.
 
 ## Features
