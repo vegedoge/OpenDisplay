@@ -1,4 +1,5 @@
 import Cocoa
+import ServiceManagement
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
@@ -56,6 +57,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(enableItem)
             menu.addItem(NSMenuItem.separator())
         }
+
+        // Launch at login toggle
+        let launchItem = NSMenuItem(title: "开机自启动", action: #selector(onToggleLaunchAtLogin(_:)), keyEquivalent: "")
+        launchItem.target = self
+        launchItem.state = isLaunchAtLoginEnabled() ? .on : .off
+        menu.addItem(launchItem)
+
+        menu.addItem(NSMenuItem.separator())
 
         let quit = NSMenuItem(title: "退出 MyDisplay", action: #selector(onQuit), keyEquivalent: "q")
         quit.target = self
@@ -165,6 +174,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let did = CGDirectDisplayID(sender.tag)
         disabledDisplays.removeValue(forKey: did)
         dm.setDisplayEnabled(did, enabled: true)
+    }
+
+    @objc private func onToggleLaunchAtLogin(_ sender: NSMenuItem) {
+        let service = SMAppService.mainApp
+        do {
+            if service.status == .enabled {
+                try service.unregister()
+            } else {
+                try service.register()
+            }
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "设置失败"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
+    }
+
+    private func isLaunchAtLoginEnabled() -> Bool {
+        SMAppService.mainApp.status == .enabled
     }
 
     @objc private func onQuit() {
