@@ -2,16 +2,20 @@ APP_NAME  = MyDisplay
 BUILD_DIR = build
 APP       = $(BUILD_DIR)/$(APP_NAME).app
 SWIFT_SRC = Sources/main.swift Sources/AppDelegate.swift Sources/DisplayManager.swift
-OBJC_SRC  = Sources/VirtualDisplay.m
-OBJC_OBJ  = $(BUILD_DIR)/VirtualDisplay.o
+OBJC_SRC  = Sources/VirtualDisplay.m Sources/CGSModeHelper.m
+OBJC_OBJ  = $(BUILD_DIR)/VirtualDisplay.o $(BUILD_DIR)/CGSModeHelper.o
 
 .PHONY: all run install clean
 
 all: $(APP)
 
-$(OBJC_OBJ): $(OBJC_SRC) Sources/VirtualDisplay.h
+$(BUILD_DIR)/VirtualDisplay.o: Sources/VirtualDisplay.m Sources/VirtualDisplay.h
 	@mkdir -p $(BUILD_DIR)
-	clang -c $(OBJC_SRC) -o $(OBJC_OBJ) -fobjc-arc -fmodules
+	clang -c Sources/VirtualDisplay.m -o $@ -fobjc-arc -fmodules
+
+$(BUILD_DIR)/CGSModeHelper.o: Sources/CGSModeHelper.m Sources/CGSModeHelper.h
+	@mkdir -p $(BUILD_DIR)
+	clang -c Sources/CGSModeHelper.m -o $@ -fobjc-arc -fmodules
 
 $(APP): $(SWIFT_SRC) $(OBJC_OBJ) Resources/Info.plist
 	@mkdir -p "$(APP)/Contents/MacOS"

@@ -55,6 +55,7 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
 + (CGDirectDisplayID)enableHiDPIForDisplay:(CGDirectDisplayID)physicalID
                                   maxWidth:(uint32_t)width
                                  maxHeight:(uint32_t)height
+                              refreshRates:(NSArray<NSNumber *> *)refreshRates
                                displayName:(NSString *)name {
     if (![self isAvailable]) {
         fprintf(stderr, "MyDisplay: CGVirtualDisplay API not available\n");
@@ -74,10 +75,16 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
     desc.name            = [NSString stringWithFormat:@"%@ (HiDPI)", name];
     desc.maxPixelsWide   = width;
     desc.maxPixelsHigh   = height;
-    desc.sizeInMillimeters = CGSizeMake(600, 340);   // ~27"
+    // Small physical size → high PPI → macOS auto-detects as Retina
+    // 3840px / (295mm / 25.4) ≈ 330 PPI (well above retina threshold)
+    desc.sizeInMillimeters = CGSizeMake(295, 166);
     desc.productID       = 0xF0F0;
     desc.vendorID        = 0xE0E0;
     desc.serialNum       = physicalID;
+
+    // Try setting hiDPI on descriptor via KVC (some macOS versions support this)
+    @try { [desc setValue:@YES forKey:@"hiDPI"]; }
+    @catch (NSException *e) { /* property may not exist */ }
 
     // ---- Create virtual display ----
     CGVirtualDisplay *vd =
@@ -89,25 +96,32 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
 
     // ---- Build modes ----
     double ratio = (double)width / (double)height;
-    // "Looks-like" logical widths; modes are at 2x for HiDPI
     unsigned int logicalWidths[] = { 1920, 1680, 1600, 1440, 1280, 1024 };
-    int count = sizeof(logicalWidths) / sizeof(logicalWidths[0]);
+    int widthCount = sizeof(logicalWidths) / sizeof(logicalWidths[0]);
+
+    // Use provided refresh rates, fallback to 60Hz
+    NSArray<NSNumber *> *rates = refreshRates.count > 0 ? refreshRates : @[@60.0];
 
     NSMutableArray *modes = [NSMutableArray new];
-    for (int i = 0; i < count; i++) {
-        unsigned int mw = logicalWidths[i] * 2;
-        unsigned int mh = (unsigned int)round((double)(logicalWidths[i] * 2) / ratio);
-        if (mw > width) continue;   // skip modes larger than max
-        CGVirtualDisplayMode *m =
+    for (NSNumber *rateNum in rates) {
+        double rate = rateNum.doubleValue;
+        for (int i = 0; i < widthCount; i++) {
+            unsigned int mw = logicalWidths[i] * 2;
+            unsigned int mh = (unsigned int)round((double)(logicalWidths[i] * 2) / ratio);
+            if (mw > width) continue;
+            CGVirtualDisplayMode *m =
+                [(CGVirtualDisplayMode *)[NSClassFromString(@"CGVirtualDisplayMode") alloc]
+                    initWithWidth:mw height:mh refreshRate:rate];
+            if (m) [modes addObject:m];
+        }
+        // Native-2x mode at this refresh rate
+        CGVirtualDisplayMode *nativeMode =
             [(CGVirtualDisplayMode *)[NSClassFromString(@"CGVirtualDisplayMode") alloc]
-                initWithWidth:mw height:mh refreshRate:60.0];
-        if (m) [modes addObject:m];
+                initWithWidth:width height:height refreshRate:rate];
+        if (nativeMode) [modes addObject:nativeMode];
     }
-    // Also add native-2x mode (e.g. 2560x1440 → 1280x720 HiDPI)
-    CGVirtualDisplayMode *nativeMode =
-        [(CGVirtualDisplayMode *)[NSClassFromString(@"CGVirtualDisplayMode") alloc]
-            initWithWidth:width height:height refreshRate:60.0];
-    if (nativeMode) [modes addObject:nativeMode];
+    fprintf(stderr, "MyDisplay: created %lu modes at %lu refresh rates\n",
+            (unsigned long)modes.count, (unsigned long)rates.count);
 
     // ---- Apply settings ----
     CGVirtualDisplaySettings *settings =

@@ -5,9 +5,9 @@ import Cocoa
 struct DisplayMode {
     let width: Int
     let height: Int
-    let refreshRate: Double
+    let refreshRate: Int
     let isHiDPI: Bool
-    let cgMode: CGDisplayMode
+    let modeNumber: Int32  // CGS mode number for switching
 }
 
 class DisplayInfo {
@@ -102,36 +102,34 @@ class DisplayManager {
     }
 
     private func displayModes(for id: CGDirectDisplayID) -> (current: DisplayMode?, all: [DisplayMode]) {
-        let options = ["kCGDisplayShowDuplicateLowResolutionModes": true] as CFDictionary
-        guard let cgModes = CGDisplayCopyAllDisplayModes(id, options) as? [CGDisplayMode] else {
-            return (nil, [])
+        let cgsModes = CGSModeHelper.modes(forDisplay: id)
+
+        // Dedup by (width, height, isHiDPI, hz)
+        var seen = Set<String>()
+        var modes: [DisplayMode] = []
+        for m in cgsModes {
+            let key = "\(m.width)x\(m.height)_\(m.isHiDPI)_\(m.refreshRate)"
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            modes.append(DisplayMode(width: Int(m.width), height: Int(m.height),
+                                     refreshRate: Int(m.refreshRate),
+                                     isHiDPI: m.isHiDPI, modeNumber: m.modeNumber))
         }
 
-        var best: [String: DisplayMode] = [:]
-        for cg in cgModes {
-            let hidpi = cg.pixelWidth > cg.width
-            let key = "\(cg.width)x\(cg.height)_\(hidpi)"
-            let mode = DisplayMode(width: cg.width, height: cg.height,
-                                   refreshRate: cg.refreshRate, isHiDPI: hidpi, cgMode: cg)
-            if let existing = best[key] {
-                if mode.refreshRate > existing.refreshRate { best[key] = mode }
-            } else {
-                best[key] = mode
-            }
-        }
-
-        let sorted = best.values.sorted { a, b in
+        let sorted = modes.sorted { a, b in
             if a.width != b.width { return a.width > b.width }
             if a.height != b.height { return a.height > b.height }
             if a.isHiDPI != b.isHiDPI { return a.isHiDPI }
             return a.refreshRate > b.refreshRate
         }
 
+        // Current mode from public API
         var current: DisplayMode?
         if let cg = CGDisplayCopyDisplayMode(id) {
+            let isHiDPI = cg.pixelWidth > cg.width
+            let hz = Int(cg.refreshRate.rounded())
             current = DisplayMode(width: cg.width, height: cg.height,
-                                  refreshRate: cg.refreshRate,
-                                  isHiDPI: cg.pixelWidth > cg.width, cgMode: cg)
+                                  refreshRate: hz, isHiDPI: isHiDPI, modeNumber: -1)
         }
 
         return (current, sorted)
@@ -139,11 +137,8 @@ class DisplayManager {
 
     // MARK: Mode Switching
 
-    func switchMode(displayID: CGDirectDisplayID, mode: CGDisplayMode) {
-        var config: CGDisplayConfigRef?
-        guard CGBeginDisplayConfiguration(&config) == .success else { return }
-        CGConfigureDisplayWithDisplayMode(config, displayID, mode, nil)
-        CGCompleteDisplayConfiguration(config, .permanently)
+    func switchMode(displayID: CGDirectDisplayID, modeNumber: Int32) {
+        CGSModeHelper.switchDisplay(displayID, toMode: modeNumber)
     }
 
     // MARK: Display Enable / Disable (using public CGDisplayCapture API)
@@ -172,13 +167,34 @@ class DisplayManager {
 
     func enableHiDPI(for display: DisplayInfo) {
         let native = getNativeResolution(for: display.id)
-        // Virtual display needs to be large enough for the highest HiDPI mode.
-        // For a 2560x1440 display wanting 1080p HiDPI, we need 3840x2160 rendering.
         let maxW = UInt32(max(native.width, 3840))
         let maxH = UInt32(max(native.height, 2160))
+
+        // Detect all refresh rates the physical display supports
+        let rates = getRefreshRates(for: display.id)
+
         VirtualDisplayHelper.enableHiDPI(forDisplay: display.id,
                                          maxWidth: maxW, maxHeight: maxH,
+                                         refreshRates: rates as [NSNumber],
                                          displayName: display.name)
+    }
+
+    private func getRefreshRates(for displayID: CGDirectDisplayID) -> [Double] {
+        let options = ["kCGDisplayShowDuplicateLowResolutionModes": true] as CFDictionary
+        guard let cgModes = CGDisplayCopyAllDisplayModes(displayID, options) as? [CGDisplayMode] else {
+            return [60.0]
+        }
+        // Only keep standard refresh rates to avoid bloating the virtual display
+        let standard = Set([30, 48, 50, 60, 75, 90, 100, 120, 144, 165, 240])
+        var seen = Set<Int>()
+        var rates: [Double] = []
+        for m in cgModes where m.refreshRate > 0 {
+            let hz = Int(m.refreshRate.rounded())
+            if standard.contains(hz) && seen.insert(hz).inserted {
+                rates.append(m.refreshRate)
+            }
+        }
+        return rates.isEmpty ? [60.0] : rates.sorted(by: >)
     }
 
     func disableHiDPI(for physicalID: CGDirectDisplayID) {

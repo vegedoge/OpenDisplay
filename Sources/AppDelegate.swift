@@ -60,15 +60,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func addDisplaySection(_ display: DisplayInfo, to menu: NSMenu, totalActive: Int) {
         // Header
         let suffix = display.isMain ? " (主)" : ""
-        let hidpiTag = display.isVirtual ? " [HiDPI]" : ""
-        let header = NSMenuItem(title: "\(display.name)\(suffix)\(hidpiTag)", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: "\(display.name)\(suffix)", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
 
         // Current resolution
         if let cur = display.currentMode {
-            let tag = cur.isHiDPI ? " HiDPI" : ""
-            let info = NSMenuItem(title: "  当前: \(cur.width)×\(cur.height)\(tag)", action: nil, keyEquivalent: "")
+            let curHzStr = cur.refreshRate > 0 ? " @\(cur.refreshRate)Hz" : ""
+            let info = NSMenuItem(title: "  当前: \(cur.width)×\(cur.height)\(curHzStr)", action: nil, keyEquivalent: "")
             info.isEnabled = false
             menu.addItem(info)
         }
@@ -77,17 +76,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let resSub = NSMenuItem(title: "  切换分辨率", action: nil, keyEquivalent: "")
         let resMenu = NSMenu()
         for mode in display.availableModes {
-            let hz = Int(mode.refreshRate.rounded())
-            let hzStr = hz > 0 && hz != 60 ? " @\(hz)Hz" : ""
+            let hzStr = mode.refreshRate > 0 ? " @\(mode.refreshRate)Hz" : ""
             let hidpi = mode.isHiDPI ? " (HiDPI)" : ""
             let title = "\(mode.width)×\(mode.height)\(hidpi)\(hzStr)"
 
             let item = NSMenuItem(title: title, action: #selector(onSwitchMode(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = ModeAction(displayID: display.modeTargetID, mode: mode.cgMode)
+            item.representedObject = ModeAction(displayID: display.modeTargetID, modeNumber: mode.modeNumber)
 
             if let cur = display.currentMode,
-               mode.width == cur.width && mode.height == cur.height && mode.isHiDPI == cur.isHiDPI {
+               mode.width == cur.width && mode.height == cur.height
+                && mode.isHiDPI == cur.isHiDPI && mode.refreshRate == cur.refreshRate {
                 item.state = .on
             }
             resMenu.addItem(item)
@@ -95,11 +94,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resSub.submenu = resMenu
         menu.addItem(resSub)
 
-        // HiDPI toggle (virtual display approach)
+        // HiDPI toggle — simple checkmark: ✓ = on
         if dm.isHiDPIAvailable {
             let enabled = dm.isHiDPIEnabled(for: display.physicalID)
             let hidpiItem = NSMenuItem(
-                title: enabled ? "  关闭 HiDPI" : "  启用 HiDPI",
+                title: "  HiDPI",
                 action: #selector(onToggleHiDPI(_:)),
                 keyEquivalent: "")
             hidpiItem.target = self
@@ -121,7 +120,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func onSwitchMode(_ sender: NSMenuItem) {
         guard let action = sender.representedObject as? ModeAction else { return }
-        dm.switchMode(displayID: action.displayID, mode: action.mode)
+        dm.switchMode(displayID: action.displayID, modeNumber: action.modeNumber)
     }
 
     @objc private func onToggleHiDPI(_ sender: NSMenuItem) {
@@ -166,9 +165,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 class ModeAction {
     let displayID: CGDirectDisplayID
-    let mode: CGDisplayMode
-    init(displayID: CGDirectDisplayID, mode: CGDisplayMode) {
+    let modeNumber: Int32
+    init(displayID: CGDirectDisplayID, modeNumber: Int32) {
         self.displayID = displayID
-        self.mode = mode
+        self.modeNumber = modeNumber
     }
 }

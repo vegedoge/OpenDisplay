@@ -12,9 +12,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Create a HiDPI virtual display and mirror the physical display to it.
 /// Returns the virtual display ID, or kCGNullDirectDisplay on failure.
+/// @param refreshRates Array of NSNumber (double) refresh rates the physical display supports.
 + (CGDirectDisplayID)enableHiDPIForDisplay:(CGDirectDisplayID)physicalID
                                   maxWidth:(uint32_t)width
                                  maxHeight:(uint32_t)height
+                              refreshRates:(NSArray<NSNumber *> *)refreshRates
                                displayName:(NSString *)name;
 
 /// Remove the virtual display and un-mirror the physical display.
