@@ -201,8 +201,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (did, _) in disabledDisplays {
             dm.setDisplayEnabled(did, enabled: true)
         }
-        // Remove all virtual displays
-        dm.cleanupAllHiDPI()
+        // Don't destroy virtual displays — let macOS handle cleanup.
+        // This gives the best chance of display settings persisting briefly,
+        // and restoreState() will re-apply on next launch.
+        dm.saveState(displays: dm.getActiveDisplays())
         NSApp.terminate(nil)
     }
 }
