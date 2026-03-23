@@ -60,12 +60,9 @@ class DisplayManager {
             self?.modeCacheDirty = true
             self?.modeCache.removeAll()
             VirtualDisplayHelper.cleanupDisconnectedDisplays()
-            // Delay checks — WindowServer needs time to finish virtual display teardown
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                self?.autoEnableBuiltinIfNeeded()
-            }
+            // cleanupDisconnectedDisplays synchronously re-enables built-in if needed.
+            // Delay HiDPI restore to let display settle.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                self?.autoEnableBuiltinIfNeeded() // second check in case first was too early
                 self?.restoreHiDPIForReconnectedDisplays()
             }
         }
@@ -96,10 +93,12 @@ class DisplayManager {
         }
     }
 
-    /// Restore HiDPI for external displays that were reconnected
+    /// Restore HiDPI for external displays that were reconnected,
+    /// and re-disable built-in if it was previously disabled by the user.
     private func restoreHiDPIForReconnectedDisplays() {
         let savedHiDPI = UserDefaults.standard.stringArray(forKey: "hidpi_displays") ?? []
-        guard !savedHiDPI.isEmpty else { return }
+        let builtinShouldBeDisabled = UserDefaults.standard.bool(forKey: "builtin_disabled")
+        var didRestoreExternal = false
 
         for display in getActiveDisplays() {
             if display.isBuiltin { continue }
@@ -107,6 +106,7 @@ class DisplayManager {
             if savedHiDPI.contains(key) && !isHiDPIEnabled(for: display.physicalID) {
                 NSLog("OpenDisplay: restoring HiDPI for reconnected \(display.name)")
                 enableHiDPI(for: display)
+                didRestoreExternal = true
                 if let savedMode = UserDefaults.standard.object(forKey: "mode_\(key)") as? Int {
                     let modeNum = Int32(savedMode)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [self] in
@@ -117,6 +117,14 @@ class DisplayManager {
                         switchMode(displayID: target, modeNumber: modeNum)
                     }
                 }
+            }
+        }
+
+        // If external display was restored and built-in was previously disabled, re-disable it
+        if didRestoreExternal && builtinShouldBeDisabled {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
+                NSLog("OpenDisplay: re-disabling built-in display (user preference)")
+                _ = setDisplayEnabled(1, enabled: false)
             }
         }
     }

@@ -185,6 +185,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let display = sender.representedObject as? DisplayInfo else { return }
         disabledDisplays[display.id] = display.name
         dm.capturedDisplays[display.id] = display.isBuiltin
+        // Persist built-in disabled state
+        if display.isBuiltin {
+            UserDefaults.standard.set(true, forKey: "builtin_disabled")
+        }
         if !dm.setDisplayEnabled(display.id, enabled: false) {
             disabledDisplays.removeValue(forKey: display.id)
             dm.capturedDisplays.removeValue(forKey: display.id)
@@ -199,6 +203,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let did = CGDirectDisplayID(sender.tag)
         disabledDisplays.removeValue(forKey: did)
         dm.capturedDisplays.removeValue(forKey: did)
+        if CGDisplayIsBuiltin(did) != 0 {
+            UserDefaults.standard.set(false, forKey: "builtin_disabled")
+        }
         dm.setDisplayEnabled(did, enabled: true)
     }
 
