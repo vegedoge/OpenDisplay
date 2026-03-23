@@ -6,12 +6,12 @@ Lightweight macOS menu bar tool for multi-display management. Built entirely thr
 
 ## Features
 
-- **HiDPI for non-4K displays** — Enable HiDPI (Retina rendering) on 2K/1440p external monitors via virtual display + mirroring. Instant, no logout required.
-- **Resolution & refresh rate switching** — Full mode list including HiDPI modes, via CGS private API (works on macOS 26 where public API no longer exposes HiDPI modes).
+- **HiDPI for non-4K displays** — Enable HiDPI (Retina rendering) on 2K/1440p external monitors. Instant, no logout required.
+- **Resolution & refresh rate switching** — Full mode list including HiDPI modes.
 - **Display on/off** — Disable external displays without unplugging. Auto-restores on quit.
 - **Set main display** — Promote any display to primary with one click.
 - **Auto-restore** — Remembers HiDPI state and resolution per display. Auto-restores on reconnect and app launch.
-- **Launch at login** — Via SMAppService.
+- **Launch at login** — Native macOS login item support.
 
 ## Requirements
 
