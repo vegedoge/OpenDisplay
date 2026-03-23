@@ -37,7 +37,7 @@ make clean    # clean build
 
 ## Disclaimer
 
-This software is provided as-is, without warranty of any kind. It has not been exhaustively tested across all hardware configurations. Use at your own risk — the authors are not responsible for any issues that may arise.
+This is an experimental open-source tool for power users. The software is provided as-is, without warranty of any kind. It has not been exhaustively tested across all hardware configurations. Use at your own risk — the authors are not responsible for any issues that may arise.
 
 ## License
 
