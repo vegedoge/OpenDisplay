@@ -51,26 +51,57 @@ class DisplayManager {
     private var modeCache: [CGDirectDisplayID: [DisplayMode]] = [:]
     private var modeCacheDirty = true
 
+    /// Track displays we disabled, with whether they were built-in at capture time
+    var capturedDisplays: [CGDirectDisplayID: Bool] = [:]  // displayID -> isBuiltin
+
     init() {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             self?.modeCacheDirty = true
             self?.modeCache.removeAll()
             VirtualDisplayHelper.cleanupDisconnectedDisplays()
-            // Auto-restore HiDPI for reconnected displays (debounce 2s)
+            // Delay checks — WindowServer needs time to finish virtual display teardown
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.autoEnableBuiltinIfNeeded()
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                self?.restoreHiDPIForNewDisplays()
+                self?.autoEnableBuiltinIfNeeded() // second check in case first was too early
+                self?.restoreHiDPIForReconnectedDisplays()
             }
         }
     }
 
-    /// Check if any saved HiDPI displays have been reconnected and restore them.
-    private func restoreHiDPIForNewDisplays() {
+    /// If no external display is active, force re-enable the built-in display.
+    /// CGSConfigureDisplayEnabled removes displays from both active AND online lists,
+    /// so we can't detect disabled built-in via system queries. Instead, just check:
+    /// if nothing external is active, the built-in MUST be enabled or the user is stuck.
+    private func autoEnableBuiltinIfNeeded() {
+        var activeCount: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &activeCount)
+        var activeIDs = [CGDirectDisplayID](repeating: 0, count: Int(activeCount))
+        CGGetActiveDisplayList(activeCount, &activeIDs, &activeCount)
+
+        let hasExternalActive = activeIDs.contains { CGDisplayIsBuiltin($0) == 0 }
+        let hasBuiltinActive = activeIDs.contains { CGDisplayIsBuiltin($0) != 0 }
+
+        if !hasExternalActive && !hasBuiltinActive {
+            // No displays active at all — emergency: re-enable built-in (typically ID 1)
+            NSLog("OpenDisplay: no active displays, emergency re-enabling built-in")
+            _ = setDisplayEnabled(1, enabled: true)
+            capturedDisplays.removeValue(forKey: 1)
+        } else if !hasExternalActive && hasBuiltinActive {
+            // Built-in is already active, nothing to do
+        } else if hasExternalActive && !hasBuiltinActive {
+            // External active, built-in disabled — this is the user's intended state, do nothing
+        }
+    }
+
+    /// Restore HiDPI for external displays that were reconnected
+    private func restoreHiDPIForReconnectedDisplays() {
         let savedHiDPI = UserDefaults.standard.stringArray(forKey: "hidpi_displays") ?? []
         guard !savedHiDPI.isEmpty else { return }
 
         for display in getActiveDisplays() {
-            // Skip built-in displays — they have native Retina
             if display.isBuiltin { continue }
             let key = displayKey(display)
             if savedHiDPI.contains(key) && !isHiDPIEnabled(for: display.physicalID) {
@@ -81,7 +112,6 @@ class DisplayManager {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [self] in
                         let vid = VirtualDisplayHelper.virtualID(forPhysical: display.id)
                         let target = vid != kCGNullDirectDisplay ? vid : display.id
-                        // Validate mode number exists in available modes
                         let validModes = CGSModeHelper.modes(forDisplay: target)
                         guard validModes.contains(where: { $0.modeNumber == modeNum }) else { return }
                         switchMode(displayID: target, modeNumber: modeNum)
@@ -92,6 +122,16 @@ class DisplayManager {
     }
 
     // MARK: Enumeration
+
+    /// All physically connected display IDs (includes disabled ones)
+    func getOnlineDisplayIDs() -> [CGDirectDisplayID] {
+        var count: UInt32 = 0
+        CGGetOnlineDisplayList(0, nil, &count)
+        guard count > 0 else { return [] }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetOnlineDisplayList(count, &ids, &count)
+        return ids
+    }
 
     func getActiveDisplays() -> [DisplayInfo] {
         var count: UInt32 = 0
@@ -216,21 +256,13 @@ class DisplayManager {
         CGCompleteDisplayConfiguration(config, .permanently)
     }
 
-    // MARK: Display Enable / Disable (using public CGDisplayCapture API)
+    // MARK: Display Enable / Disable via CGSConfigureDisplayEnabled
 
     func setDisplayEnabled(_ displayID: CGDirectDisplayID, enabled: Bool) -> Bool {
-        if enabled {
-            let result = CGDisplayRelease(displayID)
-            NSLog("OpenDisplay: CGDisplayRelease(\(displayID)) -> \(result)")
-            return result == .success
-        } else {
-            let result = CGDisplayCapture(displayID)
-            NSLog("OpenDisplay: CGDisplayCapture(\(displayID)) -> \(result)")
-            return result == .success
-        }
+        return CGSDisplayHelper.setDisplay(displayID, enabled: enabled)
     }
 
-    var canControlDisplayPower: Bool { true }
+    var canControlDisplayPower: Bool { CGSDisplayHelper.isAvailable() }
 
     // MARK: HiDPI via Virtual Display
 

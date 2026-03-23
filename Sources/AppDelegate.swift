@@ -45,8 +45,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(NSMenuItem.separator())
         }
 
-        // Disabled (captured) displays
-        for (did, name) in disabledDisplays {
+        // Disabled displays: from our tracking + detect system-level disabled displays
+        // (online but not active = disabled by us in a previous session or externally)
+        var disabledToShow = disabledDisplays
+        let activeSet = Set(displays.map { $0.id })
+        for did in dm.getOnlineDisplayIDs() {
+            if !activeSet.contains(did) && disabledToShow[did] == nil {
+                let name = CGDisplayIsBuiltin(did) != 0 ? "内置显示器" : "显示器 \(did)"
+                disabledToShow[did] = name
+            }
+        }
+
+        for (did, name) in disabledToShow {
             let header = NSMenuItem(title: "\(name) (已关闭)", action: nil, keyEquivalent: "")
             header.isEnabled = false
             menu.addItem(header)
@@ -108,7 +118,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resSub.submenu = resMenu
         menu.addItem(resSub)
 
-        // HiDPI toggle — only for external displays (built-in is already Retina)
+        // HiDPI toggle — only for external displays (built-in is native Retina)
         if dm.isHiDPIAvailable && !display.isBuiltin {
             let enabled = dm.isHiDPIEnabled(for: display.physicalID)
             let hidpiItem = NSMenuItem(
@@ -121,7 +131,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(hidpiItem)
         }
 
-        // Set as main display (only show for non-main when multiple displays)
+        // Set as main display
         if !display.isMain && totalActive > 1 {
             let mainItem = NSMenuItem(title: "  设为主显示器", action: #selector(onSetMainDisplay(_:)), keyEquivalent: "")
             mainItem.target = self
@@ -174,8 +184,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func onDisableDisplay(_ sender: NSMenuItem) {
         guard let display = sender.representedObject as? DisplayInfo else { return }
         disabledDisplays[display.id] = display.name
+        dm.capturedDisplays[display.id] = display.isBuiltin
         if !dm.setDisplayEnabled(display.id, enabled: false) {
             disabledDisplays.removeValue(forKey: display.id)
+            dm.capturedDisplays.removeValue(forKey: display.id)
             let alert = NSAlert()
             alert.messageText = "无法关闭显示器"
             alert.informativeText = "系统拒绝了此操作。"
@@ -186,6 +198,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func onEnableDisplay(_ sender: NSMenuItem) {
         let did = CGDirectDisplayID(sender.tag)
         disabledDisplays.removeValue(forKey: did)
+        dm.capturedDisplays.removeValue(forKey: did)
         dm.setDisplayEnabled(did, enabled: true)
     }
 
