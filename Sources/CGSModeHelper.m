@@ -27,11 +27,9 @@ static ConfigDispModeFn _configMode;
 @implementation CGSModeHelper
 
 + (void)initialize {
-    void *h = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_LAZY);
-    if (!h) return;
-    _getNumModes = dlsym(h, "CGSGetNumberOfDisplayModes");
-    _getModeDesc = dlsym(h, "CGSGetDisplayModeDescriptionOfLength");
-    _configMode  = dlsym(h, "CGSConfigureDisplayMode");
+    _getNumModes = dlsym(RTLD_DEFAULT, "CGSGetNumberOfDisplayModes");
+    _getModeDesc = dlsym(RTLD_DEFAULT, "CGSGetDisplayModeDescriptionOfLength");
+    _configMode  = dlsym(RTLD_DEFAULT, "CGSConfigureDisplayMode");
 }
 
 + (NSArray<DisplayModeInfo *> *)modesForDisplay:(CGDirectDisplayID)displayID {

@@ -81,6 +81,9 @@ class DisplayManager {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [self] in
                         let vid = VirtualDisplayHelper.virtualID(forPhysical: display.id)
                         let target = vid != kCGNullDirectDisplay ? vid : display.id
+                        // Validate mode number exists in available modes
+                        let validModes = CGSModeHelper.modes(forDisplay: target)
+                        guard validModes.contains(where: { $0.modeNumber == modeNum }) else { return }
                         switchMode(displayID: target, modeNumber: modeNum)
                     }
                 }
@@ -329,6 +332,8 @@ class DisplayManager {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                         let virtualID = VirtualDisplayHelper.virtualID(forPhysical: display.id)
                         let target = virtualID != kCGNullDirectDisplay ? virtualID : display.id
+                        let validModes = CGSModeHelper.modes(forDisplay: target)
+                        guard validModes.contains(where: { $0.modeNumber == modeNum }) else { return }
                         self.switchMode(displayID: target, modeNumber: modeNum)
                         NSLog("OpenDisplay: restored mode \(modeNum) for \(display.name)")
                     }
