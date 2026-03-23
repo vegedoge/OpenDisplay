@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.local.MyDisplay</string>
+    <string>com.local.OpenDisplay</string>
     <key>CFBundleName</key>
-    <string>MyDisplay</string>
+    <string>OpenDisplay</string>
     <key>CFBundleDisplayName</key>
-    <string>MyDisplay</string>
+    <string>OpenDisplay</string>
     <key>CFBundleExecutable</key>
-    <string>MyDisplay</string>
+    <string>OpenDisplay</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>

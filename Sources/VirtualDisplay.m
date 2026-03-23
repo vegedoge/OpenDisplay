@@ -58,7 +58,7 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
                               refreshRates:(NSArray<NSNumber *> *)refreshRates
                                displayName:(NSString *)name {
     if (![self isAvailable]) {
-        fprintf(stderr, "MyDisplay: CGVirtualDisplay API not available\n");
+        fprintf(stderr, "OpenDisplay: CGVirtualDisplay API not available\n");
         return kCGNullDirectDisplay;
     }
 
@@ -90,7 +90,7 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
     CGVirtualDisplay *vd =
         [(CGVirtualDisplay *)[NSClassFromString(@"CGVirtualDisplay") alloc] initWithDescriptor:desc];
     if (!vd) {
-        fprintf(stderr, "MyDisplay: CGVirtualDisplay init failed\n");
+        fprintf(stderr, "OpenDisplay: CGVirtualDisplay init failed\n");
         return kCGNullDirectDisplay;
     }
 
@@ -120,7 +120,7 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
                 initWithWidth:width height:height refreshRate:rate];
         if (nativeMode) [modes addObject:nativeMode];
     }
-    fprintf(stderr, "MyDisplay: created %lu modes at %lu refresh rates\n",
+    fprintf(stderr, "OpenDisplay: created %lu modes at %lu refresh rates\n",
             (unsigned long)modes.count, (unsigned long)rates.count);
 
     // ---- Apply settings ----
@@ -131,20 +131,20 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
 
     CGError err = [vd applySettings:settings];
     if (err != kCGErrorSuccess) {
-        fprintf(stderr, "MyDisplay: applySettings error %d\n", err);
+        fprintf(stderr, "OpenDisplay: applySettings error %d\n", err);
     }
 
     _vdMap[@(physicalID)] = vd;
 
     CGDirectDisplayID virtualID = [vd displayID];
-    fprintf(stderr, "MyDisplay: virtual display %u created for physical %u (%ux%u)\n",
+    fprintf(stderr, "OpenDisplay: virtual display %u created for physical %u (%ux%u)\n",
             virtualID, physicalID, width, height);
 
     // Delay mirroring — the system needs time to register the virtual display
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         CGDirectDisplayID vid = [vd displayID];
-        fprintf(stderr, "MyDisplay: setting up mirror physical=%u -> virtual=%u\n", physicalID, vid);
+        fprintf(stderr, "OpenDisplay: setting up mirror physical=%u -> virtual=%u\n", physicalID, vid);
 
         // Save all OTHER displays' origins so they don't move
         uint32_t dcount = 0;
@@ -162,7 +162,7 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
         CGDisplayConfigRef config = NULL;
         CGError err = CGBeginDisplayConfiguration(&config);
         if (err != kCGErrorSuccess) {
-            fprintf(stderr, "MyDisplay: CGBeginDisplayConfiguration failed: %d\n", err);
+            fprintf(stderr, "OpenDisplay: CGBeginDisplayConfiguration failed: %d\n", err);
             free(dids); free(origins);
             return;
         }
@@ -177,7 +177,7 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
         }
 
         err = CGCompleteDisplayConfiguration(config, kCGConfigureForSession);
-        fprintf(stderr, "MyDisplay: mirror config result: %d\n", err);
+        fprintf(stderr, "OpenDisplay: mirror config result: %d\n", err);
 
         if (err != kCGErrorSuccess) {
             CGBeginDisplayConfiguration(&config);
@@ -188,7 +188,7 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
                 }
             }
             err = CGCompleteDisplayConfiguration(config, kCGConfigurePermanently);
-            fprintf(stderr, "MyDisplay: mirror config (permanent) result: %d\n", err);
+            fprintf(stderr, "OpenDisplay: mirror config (permanent) result: %d\n", err);
         }
 
         free(dids); free(origins);
@@ -209,7 +209,7 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
     // Release virtual display (ARC will dealloc it)
     [_vdMap removeObjectForKey:@(physicalID)];
     [_nameMap removeObjectForKey:@(physicalID)];
-    NSLog(@"MyDisplay: HiDPI disabled for physical %u", physicalID);
+    NSLog(@"OpenDisplay: HiDPI disabled for physical %u", physicalID);
 }
 
 + (BOOL)isHiDPIEnabledForDisplay:(CGDirectDisplayID)physicalID {

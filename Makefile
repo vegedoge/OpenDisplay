@@ -1,9 +1,8 @@
-APP_NAME  = MyDisplay
+APP_NAME  = OpenDisplay
 BUILD_DIR = build
 APP       = $(BUILD_DIR)/$(APP_NAME).app
 SWIFT_SRC = Sources/main.swift Sources/AppDelegate.swift Sources/DisplayManager.swift
-OBJC_SRC  = Sources/VirtualDisplay.m Sources/CGSModeHelper.m
-OBJC_OBJ  = $(BUILD_DIR)/VirtualDisplay.o $(BUILD_DIR)/CGSModeHelper.o
+OBJC_OBJ  = $(BUILD_DIR)/VirtualDisplay.o $(BUILD_DIR)/CGSModeHelper.o $(BUILD_DIR)/BrightnessHelper.o
 
 .PHONY: all run install clean
 
@@ -17,6 +16,10 @@ $(BUILD_DIR)/CGSModeHelper.o: Sources/CGSModeHelper.m Sources/CGSModeHelper.h
 	@mkdir -p $(BUILD_DIR)
 	clang -c Sources/CGSModeHelper.m -o $@ -fobjc-arc -fmodules
 
+$(BUILD_DIR)/BrightnessHelper.o: Sources/BrightnessHelper.m Sources/BrightnessHelper.h
+	@mkdir -p $(BUILD_DIR)
+	clang -c Sources/BrightnessHelper.m -o $@ -fobjc-arc -fmodules
+
 $(APP): $(SWIFT_SRC) $(OBJC_OBJ) Resources/Info.plist
 	@mkdir -p "$(APP)/Contents/MacOS"
 	@mkdir -p "$(APP)/Contents/Resources"
@@ -24,6 +27,7 @@ $(APP): $(SWIFT_SRC) $(OBJC_OBJ) Resources/Info.plist
 		-import-objc-header Sources/BridgingHeader.h \
 		-o "$(APP)/Contents/MacOS/$(APP_NAME)" \
 		-framework Cocoa \
+		-framework IOKit \
 		-swift-version 5 \
 		-O
 	@cp Resources/Info.plist "$(APP)/Contents/Info.plist"
@@ -34,6 +38,7 @@ run: $(APP)
 	@open "$(APP)"
 
 install: $(APP)
+	@rm -rf "/Applications/MyDisplay.app"
 	@cp -R "$(APP)" /Applications/
 	@echo "Installed to /Applications/$(APP_NAME).app"
 

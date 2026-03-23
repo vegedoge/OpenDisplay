@@ -146,11 +146,11 @@ class DisplayManager {
     func setDisplayEnabled(_ displayID: CGDirectDisplayID, enabled: Bool) -> Bool {
         if enabled {
             let result = CGDisplayRelease(displayID)
-            NSLog("MyDisplay: CGDisplayRelease(\(displayID)) -> \(result)")
+            NSLog("OpenDisplay: CGDisplayRelease(\(displayID)) -> \(result)")
             return result == .success
         } else {
             let result = CGDisplayCapture(displayID)
-            NSLog("MyDisplay: CGDisplayCapture(\(displayID)) -> \(result)")
+            NSLog("OpenDisplay: CGDisplayCapture(\(displayID)) -> \(result)")
             return result == .success
         }
     }
@@ -248,7 +248,7 @@ class DisplayManager {
         for display in displays {
             let key = displayKey(display)
             if savedHiDPI.contains(key) && !isHiDPIEnabled(for: display.physicalID) {
-                NSLog("MyDisplay: restoring HiDPI for \(display.name) (\(key))")
+                NSLog("OpenDisplay: restoring HiDPI for \(display.name) (\(key))")
                 enableHiDPI(for: display)
 
                 // Restore saved mode after HiDPI setup (needs delay for virtual display)
@@ -258,7 +258,7 @@ class DisplayManager {
                         let virtualID = VirtualDisplayHelper.virtualID(forPhysical: display.id)
                         let target = virtualID != kCGNullDirectDisplay ? virtualID : display.id
                         self.switchMode(displayID: target, modeNumber: modeNum)
-                        NSLog("MyDisplay: restored mode \(modeNum) for \(display.name)")
+                        NSLog("OpenDisplay: restored mode \(modeNum) for \(display.name)")
                     }
                 }
             }

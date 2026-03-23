@@ -73,7 +73,7 @@ static ConfigDispModeFn _configMode;
 
 + (BOOL)switchDisplay:(CGDirectDisplayID)displayID toMode:(int32_t)modeNumber {
     if (!_configMode) {
-        fprintf(stderr, "MyDisplay: CGSConfigureDisplayMode not available\n");
+        fprintf(stderr, "OpenDisplay: CGSConfigureDisplayMode not available\n");
         return NO;
     }
 
@@ -82,7 +82,7 @@ static ConfigDispModeFn _configMode;
     if (err != kCGErrorSuccess) return NO;
 
     int result = _configMode(config, displayID, modeNumber);
-    fprintf(stderr, "MyDisplay: CGSConfigureDisplayMode(%u, %d) = %d\n",
+    fprintf(stderr, "OpenDisplay: CGSConfigureDisplayMode(%u, %d) = %d\n",
             displayID, modeNumber, result);
 
     err = CGCompleteDisplayConfiguration(config, kCGConfigurePermanently);
