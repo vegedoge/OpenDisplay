@@ -2,7 +2,7 @@
 
 [中文说明](README_CN.md)
 
-macOS menu bar tool for display management. Lightweight alternative to BetterDisplay focused on HiDPI and multi-monitor control.
+Lightweight macOS menu bar tool for multi-display management. Built entirely through agentic coding with Claude Code.
 
 ## Features
 

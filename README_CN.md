@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-macOS 菜单栏显示器管理工具。专注于 HiDPI 和多显示器控制的轻量级 BetterDisplay 替代方案。
+轻量级 macOS 菜单栏多显示器管理工具。完全通过 Claude Code 的 agentic coding 方式实现。
 
 ## 功能
 
