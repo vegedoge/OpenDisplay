@@ -19,6 +19,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
+
+        // Restore saved configuration after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [self] in
+            dm.restoreState()
+        }
     }
 
     // MARK: NSMenuDelegate
@@ -121,6 +126,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func onSwitchMode(_ sender: NSMenuItem) {
         guard let action = sender.representedObject as? ModeAction else { return }
         dm.switchMode(displayID: action.displayID, modeNumber: action.modeNumber)
+        // Save the chosen mode for this display
+        // Find the display this action belongs to
+        for d in dm.getActiveDisplays() where d.modeTargetID == action.displayID {
+            dm.saveModeForDisplay(d, modeNumber: action.modeNumber)
+            break
+        }
     }
 
     @objc private func onToggleHiDPI(_ sender: NSMenuItem) {
@@ -131,6 +142,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             dm.disableHiDPI(for: display.physicalID)
         } else {
             dm.enableHiDPI(for: display)
+        }
+        // Save HiDPI state for all displays
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
+            dm.saveState(displays: dm.getActiveDisplays())
         }
     }
 

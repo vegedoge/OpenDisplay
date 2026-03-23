@@ -218,4 +218,50 @@ class DisplayManager {
         }
         return maxW > 0 ? (maxW, maxH) : (Int(CGDisplayPixelsWide(displayID)), Int(CGDisplayPixelsHigh(displayID)))
     }
+
+    // MARK: - Persistence
+
+    private func displayKey(_ d: DisplayInfo) -> String {
+        "\(d.vendorID)_\(d.productID)"
+    }
+
+    func saveState(displays: [DisplayInfo]) {
+        var hidpiDisplays: [String] = []
+        for d in displays {
+            if isHiDPIEnabled(for: d.physicalID) {
+                hidpiDisplays.append(displayKey(d))
+            }
+        }
+        UserDefaults.standard.set(hidpiDisplays, forKey: "hidpi_displays")
+    }
+
+    func saveModeForDisplay(_ display: DisplayInfo, modeNumber: Int32) {
+        UserDefaults.standard.set(Int(modeNumber), forKey: "mode_\(displayKey(display))")
+    }
+
+    /// Restore HiDPI state for all connected displays. Call once on launch.
+    func restoreState() {
+        let savedHiDPI = UserDefaults.standard.stringArray(forKey: "hidpi_displays") ?? []
+        guard !savedHiDPI.isEmpty else { return }
+
+        let displays = getActiveDisplays()
+        for display in displays {
+            let key = displayKey(display)
+            if savedHiDPI.contains(key) && !isHiDPIEnabled(for: display.physicalID) {
+                NSLog("MyDisplay: restoring HiDPI for \(display.name) (\(key))")
+                enableHiDPI(for: display)
+
+                // Restore saved mode after HiDPI setup (needs delay for virtual display)
+                if let savedMode = UserDefaults.standard.object(forKey: "mode_\(key)") as? Int {
+                    let modeNum = Int32(savedMode)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        let virtualID = VirtualDisplayHelper.virtualID(forPhysical: display.id)
+                        let target = virtualID != kCGNullDirectDisplay ? virtualID : display.id
+                        self.switchMode(displayID: target, modeNumber: modeNum)
+                        NSLog("MyDisplay: restored mode \(modeNum) for \(display.name)")
+                    }
+                }
+            }
+        }
+    }
 }

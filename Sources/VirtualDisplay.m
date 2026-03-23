@@ -146,25 +146,52 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
         CGDirectDisplayID vid = [vd displayID];
         fprintf(stderr, "MyDisplay: setting up mirror physical=%u -> virtual=%u\n", physicalID, vid);
 
+        // Save all OTHER displays' origins so they don't move
+        uint32_t dcount = 0;
+        CGGetActiveDisplayList(0, NULL, &dcount);
+        uint32_t *dids = calloc(dcount, sizeof(uint32_t));
+        CGGetActiveDisplayList(dcount, dids, &dcount);
+
+        typedef struct { uint32_t did; int32_t x, y; } SavedOrigin;
+        SavedOrigin *origins = calloc(dcount, sizeof(SavedOrigin));
+        for (uint32_t i = 0; i < dcount; i++) {
+            CGRect bounds = CGDisplayBounds(dids[i]);
+            origins[i] = (SavedOrigin){ dids[i], (int32_t)bounds.origin.x, (int32_t)bounds.origin.y };
+        }
+
         CGDisplayConfigRef config = NULL;
         CGError err = CGBeginDisplayConfiguration(&config);
         if (err != kCGErrorSuccess) {
             fprintf(stderr, "MyDisplay: CGBeginDisplayConfiguration failed: %d\n", err);
+            free(dids); free(origins);
             return;
         }
+
         CGConfigureDisplayMirrorOfDisplay(config, physicalID, vid);
 
-        // Try kCGConfigureForSession first (less restrictive)
+        // Pin other displays to their current positions
+        for (uint32_t i = 0; i < dcount; i++) {
+            if (origins[i].did != physicalID && origins[i].did != vid) {
+                CGConfigureDisplayOrigin(config, origins[i].did, origins[i].x, origins[i].y);
+            }
+        }
+
         err = CGCompleteDisplayConfiguration(config, kCGConfigureForSession);
         fprintf(stderr, "MyDisplay: mirror config result: %d\n", err);
 
         if (err != kCGErrorSuccess) {
-            // Fallback: try permanently
             CGBeginDisplayConfiguration(&config);
             CGConfigureDisplayMirrorOfDisplay(config, physicalID, vid);
+            for (uint32_t i = 0; i < dcount; i++) {
+                if (origins[i].did != physicalID && origins[i].did != vid) {
+                    CGConfigureDisplayOrigin(config, origins[i].did, origins[i].x, origins[i].y);
+                }
+            }
             err = CGCompleteDisplayConfiguration(config, kCGConfigurePermanently);
             fprintf(stderr, "MyDisplay: mirror config (permanent) result: %d\n", err);
         }
+
+        free(dids); free(origins);
     });
 
     return virtualID;
