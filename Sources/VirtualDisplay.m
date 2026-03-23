@@ -235,6 +235,29 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
     return kCGNullDirectDisplay;
 }
 
++ (void)cleanupDisconnectedDisplays {
+    // Get all online (physically connected) displays
+    uint32_t onlineCount = 0;
+    CGGetOnlineDisplayList(0, NULL, &onlineCount);
+    uint32_t *onlineIDs = calloc(onlineCount, sizeof(uint32_t));
+    CGGetOnlineDisplayList(onlineCount, onlineIDs, &onlineCount);
+
+    NSMutableSet<NSNumber *> *onlineSet = [NSMutableSet new];
+    for (uint32_t i = 0; i < onlineCount; i++) {
+        [onlineSet addObject:@(onlineIDs[i])];
+    }
+    free(onlineIDs);
+
+    // Remove virtual displays whose physical display is no longer online
+    for (NSNumber *physKey in [_vdMap allKeys]) {
+        if (![onlineSet containsObject:physKey]) {
+            fprintf(stderr, "OpenDisplay: physical display %u disconnected, cleaning up virtual display\n",
+                    physKey.unsignedIntValue);
+            [self disableHiDPIForDisplay:physKey.unsignedIntValue];
+        }
+    }
+}
+
 + (void)removeAll {
     for (NSNumber *key in [_vdMap allKeys]) {
         [self disableHiDPIForDisplay:key.unsignedIntValue];

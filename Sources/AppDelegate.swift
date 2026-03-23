@@ -108,8 +108,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resSub.submenu = resMenu
         menu.addItem(resSub)
 
-        // HiDPI toggle — simple checkmark: ✓ = on
-        if dm.isHiDPIAvailable {
+        // HiDPI toggle — only for external displays (built-in is already Retina)
+        if dm.isHiDPIAvailable && !display.isBuiltin {
             let enabled = dm.isHiDPIEnabled(for: display.physicalID)
             let hidpiItem = NSMenuItem(
                 title: "  HiDPI",

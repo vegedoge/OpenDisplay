@@ -52,11 +52,39 @@ class DisplayManager {
     private var modeCacheDirty = true
 
     init() {
-        // Invalidate cache when display config changes
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             self?.modeCacheDirty = true
             self?.modeCache.removeAll()
+            VirtualDisplayHelper.cleanupDisconnectedDisplays()
+            // Auto-restore HiDPI for reconnected displays (debounce 2s)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.restoreHiDPIForNewDisplays()
+            }
+        }
+    }
+
+    /// Check if any saved HiDPI displays have been reconnected and restore them.
+    private func restoreHiDPIForNewDisplays() {
+        let savedHiDPI = UserDefaults.standard.stringArray(forKey: "hidpi_displays") ?? []
+        guard !savedHiDPI.isEmpty else { return }
+
+        for display in getActiveDisplays() {
+            // Skip built-in displays — they have native Retina
+            if display.isBuiltin { continue }
+            let key = displayKey(display)
+            if savedHiDPI.contains(key) && !isHiDPIEnabled(for: display.physicalID) {
+                NSLog("OpenDisplay: restoring HiDPI for reconnected \(display.name)")
+                enableHiDPI(for: display)
+                if let savedMode = UserDefaults.standard.object(forKey: "mode_\(key)") as? Int {
+                    let modeNum = Int32(savedMode)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [self] in
+                        let vid = VirtualDisplayHelper.virtualID(forPhysical: display.id)
+                        let target = vid != kCGNullDirectDisplay ? vid : display.id
+                        switchMode(displayID: target, modeNumber: modeNum)
+                    }
+                }
+            }
         }
     }
 
