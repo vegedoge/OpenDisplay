@@ -45,8 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(NSMenuItem.separator())
         }
 
-        // Disabled displays: from our tracking + detect system-level disabled displays
-        // (online but not active = disabled by us in a previous session or externally)
+        // Disabled displays: in-memory tracking + online-but-not-active + persisted builtin state
         var disabledToShow = disabledDisplays
         let activeSet = Set(displays.map { $0.id })
         for did in dm.getOnlineDisplayIDs() {
@@ -54,6 +53,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let name = CGDisplayIsBuiltin(did) != 0 ? "内置显示器" : "显示器 \(did)"
                 disabledToShow[did] = name
             }
+        }
+        // Built-in disabled persists across app restarts via UserDefaults
+        if UserDefaults.standard.bool(forKey: "builtin_disabled") && !activeSet.contains(1) && disabledToShow[1] == nil {
+            disabledToShow[1] = "内置显示器"
         }
 
         for (did, name) in disabledToShow {
