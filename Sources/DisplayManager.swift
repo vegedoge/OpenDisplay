@@ -54,16 +54,45 @@ class DisplayManager {
     /// Track displays we disabled, with whether they were built-in at capture time
     var capturedDisplays: [CGDirectDisplayID: Bool] = [:]  // displayID -> isBuiltin
 
+    private var isSystemSleeping = false
+
     init() {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             self?.modeCacheDirty = true
             self?.modeCache.removeAll()
-            VirtualDisplayHelper.cleanupDisconnectedDisplays()
-            // cleanupDisconnectedDisplays synchronously re-enables built-in if needed.
-            // Delay HiDPI restore to let display settle.
+            // Don't cleanup during sleep — displays go offline temporarily
+            if self?.isSystemSleeping != true {
+                VirtualDisplayHelper.cleanupDisconnectedDisplays()
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 self?.restoreHiDPIForReconnectedDisplays()
+            }
+        }
+
+        // Track sleep/wake to avoid false disconnect detection
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.isSystemSleeping = true
+        }
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.isSystemSleeping = false
+            // Reapply saved modes after wake — macOS may have reset them
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                self?.reapplySavedModes()
+            }
+        }
+
+        // Also handle screen wake (not full system sleep, just display sleep)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.reapplySavedModes()
             }
         }
     }
@@ -125,6 +154,33 @@ class DisplayManager {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
                 NSLog("OpenDisplay: re-disabling built-in display (user preference)")
                 _ = setDisplayEnabled(1, enabled: false)
+            }
+        }
+    }
+
+    /// Reapply saved display modes after wake — macOS may reset them
+    private func reapplySavedModes() {
+        for display in getActiveDisplays() {
+            if display.isBuiltin { continue }
+            let key = displayKey(display)
+
+            // If HiDPI should be on but isn't, restore it
+            let savedHiDPI = UserDefaults.standard.stringArray(forKey: "hidpi_displays") ?? []
+            if savedHiDPI.contains(key) && !isHiDPIEnabled(for: display.physicalID) {
+                NSLog("OpenDisplay: wake — restoring HiDPI for \(display.name)")
+                enableHiDPI(for: display)
+            }
+
+            // Reapply saved mode
+            if let savedMode = UserDefaults.standard.object(forKey: "mode_\(key)") as? Int {
+                let modeNum = Int32(savedMode)
+                let target = display.modeTargetID
+                if let cur = display.currentMode, cur.modeNumber != modeNum {
+                    let validModes = CGSModeHelper.modes(forDisplay: target)
+                    guard validModes.contains(where: { $0.modeNumber == modeNum }) else { continue }
+                    NSLog("OpenDisplay: wake — reapplying mode \(modeNum) for \(display.name)")
+                    switchMode(displayID: target, modeNumber: modeNum)
+                }
             }
         }
     }
