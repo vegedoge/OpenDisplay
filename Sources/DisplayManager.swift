@@ -54,45 +54,25 @@ class DisplayManager {
     /// Track displays we disabled, with whether they were built-in at capture time
     var capturedDisplays: [CGDirectDisplayID: Bool] = [:]  // displayID -> isBuiltin
 
-    private var isSystemSleeping = false
-
     init() {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             self?.modeCacheDirty = true
             self?.modeCache.removeAll()
-            // Don't cleanup during sleep — displays go offline temporarily
-            if self?.isSystemSleeping != true {
-                VirtualDisplayHelper.cleanupDisconnectedDisplays()
-            }
+            VirtualDisplayHelper.cleanupDisconnectedDisplays()
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 self?.restoreHiDPIForReconnectedDisplays()
             }
         }
 
-        // Track sleep/wake to avoid false disconnect detection
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.isSystemSleeping = true
-        }
-
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.isSystemSleeping = false
-            // Reapply saved modes after wake — macOS may have reset them
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-                self?.reapplySavedModes()
-            }
-        }
-
-        // Also handle screen wake (not full system sleep, just display sleep)
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                self?.reapplySavedModes()
+        // Reapply saved modes after any wake (system or display sleep)
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: name, object: nil, queue: .main
+            ) { [weak self] _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                    self?.reapplySavedModes()
+                }
             }
         }
     }
