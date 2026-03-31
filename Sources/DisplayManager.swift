@@ -54,22 +54,49 @@ class DisplayManager {
     /// Track displays we disabled, with whether they were built-in at capture time
     var capturedDisplays: [CGDirectDisplayID: Bool] = [:]  // displayID -> isBuiltin
 
+    /// Timestamp of last sleep event. Used to suppress cleanup during sleep/wake.
+    private var lastSleepTime: Date = .distantPast
+    /// How long after a sleep event we consider display-offline as "temporary" (not a real unplug)
+    private let sleepGracePeriod: TimeInterval = 30
+
+    private var isSleeping: Bool {
+        Date().timeIntervalSince(lastSleepTime) < sleepGracePeriod
+    }
+
     init() {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             self?.modeCacheDirty = true
             self?.modeCache.removeAll()
-            VirtualDisplayHelper.cleanupDisconnectedDisplays()
+
+            if self?.isSleeping == true {
+                // During sleep grace period: don't cleanup, just restore modes when things settle
+                NSLog("OpenDisplay: display change during sleep grace period, skipping cleanup")
+            } else {
+                VirtualDisplayHelper.cleanupDisconnectedDisplays()
+            }
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 self?.restoreHiDPIForReconnectedDisplays()
             }
         }
 
-        // Reapply saved modes after any wake (system or display sleep)
+        // Track sleep: both display sleep and system sleep
+        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: name, object: nil, queue: .main
+            ) { [weak self] _ in
+                NSLog("OpenDisplay: sleep detected")
+                self?.lastSleepTime = Date()
+            }
+        }
+
+        // On wake: reapply saved modes (macOS may have reset them)
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
             NSWorkspace.shared.notificationCenter.addObserver(
                 forName: name, object: nil, queue: .main
             ) { [weak self] _ in
+                NSLog("OpenDisplay: wake detected")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                     self?.reapplySavedModes()
                 }
