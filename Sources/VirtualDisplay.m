@@ -236,7 +236,7 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
     return kCGNullDirectDisplay;
 }
 
-+ (void)cleanupDisconnectedDisplays {
++ (NSArray<NSNumber *> *)cleanupDisconnectedDisplays {
     // Get all online (physically connected) displays
     uint32_t onlineCount = 0;
     CGGetOnlineDisplayList(0, NULL, &onlineCount);
@@ -250,31 +250,17 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
     free(onlineIDs);
 
     // Remove virtual displays whose physical display is no longer online
-    BOOL didCleanup = NO;
+    NSMutableArray<NSNumber *> *cleanedIDs = [NSMutableArray new];
     for (NSNumber *physKey in [_vdMap allKeys]) {
         if (![onlineSet containsObject:physKey]) {
             fprintf(stderr, "OpenDisplay: physical display %u disconnected, cleaning up virtual display\n",
                     physKey.unsignedIntValue);
             [self disableHiDPIForDisplay:physKey.unsignedIntValue];
-            didCleanup = YES;
+            [cleanedIDs addObject:physKey];
         }
     }
 
-    // External display disconnected → unconditionally re-enable built-in (ID=1).
-    // If it's already on, this is a no-op. If it was disabled, it comes back.
-    if (didCleanup) {
-        fprintf(stderr, "OpenDisplay: external disconnected, ensuring built-in (ID=1) is enabled\n");
-        typedef int (*ConfigFn)(CGDisplayConfigRef, uint32_t, int);
-        ConfigFn fn = dlsym(RTLD_DEFAULT, "CGSConfigureDisplayEnabled");
-        if (!fn) fn = dlsym(RTLD_DEFAULT, "SLSConfigureDisplayEnabled");
-        if (fn) {
-            CGDisplayConfigRef config = NULL;
-            CGBeginDisplayConfiguration(&config);
-            fn(config, 1, 1);
-            CGCompleteDisplayConfiguration(config, kCGConfigurePermanently);
-            fprintf(stderr, "OpenDisplay: built-in re-enable done\n");
-        }
-    }
+    return cleanedIDs;
 }
 
 + (void)removeAll {

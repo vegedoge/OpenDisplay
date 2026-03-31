@@ -36,7 +36,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (CGDirectDisplayID)physicalIDForVirtual:(CGDirectDisplayID)virtualID;
 
 /// Remove virtual displays whose physical display is no longer connected.
-+ (void)cleanupDisconnectedDisplays;
+/// Returns the physical display IDs that were cleaned up (empty if none).
++ (NSArray<NSNumber *> *)cleanupDisconnectedDisplays;
 
 /// Tear down all virtual displays (call on app quit).
 + (void)removeAll;

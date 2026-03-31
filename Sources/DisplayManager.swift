@@ -54,40 +54,27 @@ class DisplayManager {
     /// Track displays we disabled, with whether they were built-in at capture time
     var capturedDisplays: [CGDirectDisplayID: Bool] = [:]  // displayID -> isBuiltin
 
-    /// Timestamp of last sleep event. Used to suppress cleanup during sleep/wake.
-    private var lastSleepTime: Date = .distantPast
-    /// How long after a sleep event we consider display-offline as "temporary" (not a real unplug)
-    private let sleepGracePeriod: TimeInterval = 30
-
-    private var isSleeping: Bool {
-        Date().timeIntervalSince(lastSleepTime) < sleepGracePeriod
-    }
-
     init() {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             self?.modeCacheDirty = true
             self?.modeCache.removeAll()
 
-            if self?.isSleeping == true {
-                // During sleep grace period: don't cleanup, just restore modes when things settle
-                NSLog("OpenDisplay: display change during sleep grace period, skipping cleanup")
-            } else {
-                VirtualDisplayHelper.cleanupDisconnectedDisplays()
+            let cleanedPhysicalIDs = VirtualDisplayHelper.cleanupDisconnectedDisplays() as? [NSNumber] ?? []
+
+            if !cleanedPhysicalIDs.isEmpty {
+                let physIDs = cleanedPhysicalIDs.map { $0.uint32Value }
+                // Virtual display was removed (external went offline).
+                // Wait 3s then check: if that specific physical display didn't come back,
+                // re-enable built-in. During sleep, asyncAfter is paused — it only fires
+                // after wake, at which point the external is back online → built-in stays off.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                    self?.reenableBuiltinIfExternalGone(physicalIDs: physIDs)
+                }
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 self?.restoreHiDPIForReconnectedDisplays()
-            }
-        }
-
-        // Track sleep: both display sleep and system sleep
-        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
-            NSWorkspace.shared.notificationCenter.addObserver(
-                forName: name, object: nil, queue: .main
-            ) { [weak self] _ in
-                NSLog("OpenDisplay: sleep detected")
-                self?.lastSleepTime = Date()
             }
         }
 
@@ -96,7 +83,6 @@ class DisplayManager {
             NSWorkspace.shared.notificationCenter.addObserver(
                 forName: name, object: nil, queue: .main
             ) { [weak self] _ in
-                NSLog("OpenDisplay: wake detected")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                     self?.reapplySavedModes()
                 }
@@ -104,28 +90,23 @@ class DisplayManager {
         }
     }
 
-    /// If no external display is active, force re-enable the built-in display.
-    /// CGSConfigureDisplayEnabled removes displays from both active AND online lists,
-    /// so we can't detect disabled built-in via system queries. Instead, just check:
-    /// if nothing external is active, the built-in MUST be enabled or the user is stuck.
-    private func autoEnableBuiltinIfNeeded() {
-        var activeCount: UInt32 = 0
-        CGGetActiveDisplayList(0, nil, &activeCount)
-        var activeIDs = [CGDirectDisplayID](repeating: 0, count: Int(activeCount))
-        CGGetActiveDisplayList(activeCount, &activeIDs, &activeCount)
+    /// Re-enable built-in display if no external display is active.
+    /// Called with delay after cleanup — if system was just sleeping,
+    /// external will be back by now so this is a no-op.
+    /// Check if the specific physical displays that went offline are still gone.
+    /// If they are, re-enable built-in. If they came back (sleep/wake), do nothing.
+    private func reenableBuiltinIfExternalGone(physicalIDs: [UInt32]) {
+        let onlineIDs = Set(getOnlineDisplayIDs())
 
-        let hasExternalActive = activeIDs.contains { CGDisplayIsBuiltin($0) == 0 }
-        let hasBuiltinActive = activeIDs.contains { CGDisplayIsBuiltin($0) != 0 }
+        let anyPhysicalBack = physicalIDs.contains { onlineIDs.contains($0) }
 
-        if !hasExternalActive && !hasBuiltinActive {
-            // No displays active at all — emergency: re-enable built-in (typically ID 1)
-            NSLog("OpenDisplay: no active displays, emergency re-enabling built-in")
+        NSLog("OpenDisplay: reenableCheck — looking for physical \(physicalIDs), online=\(Array(onlineIDs)), back=\(anyPhysicalBack)")
+
+        if anyPhysicalBack {
+            NSLog("OpenDisplay: physical display reconnected (sleep/wake), keeping built-in disabled")
+        } else {
+            NSLog("OpenDisplay: physical display truly gone, re-enabling built-in")
             _ = setDisplayEnabled(1, enabled: true)
-            capturedDisplays.removeValue(forKey: 1)
-        } else if !hasExternalActive && hasBuiltinActive {
-            // Built-in is already active, nothing to do
-        } else if hasExternalActive && !hasBuiltinActive {
-            // External active, built-in disabled — this is the user's intended state, do nothing
         }
     }
 
