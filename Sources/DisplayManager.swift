@@ -137,11 +137,22 @@ class DisplayManager {
             }
         }
 
-        // If external display was restored and built-in was previously disabled, re-disable it
-        if didRestoreExternal && builtinShouldBeDisabled {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
-                NSLog("OpenDisplay: re-disabling built-in display (user preference)")
-                _ = setDisplayEnabled(1, enabled: false)
+        if didRestoreExternal {
+            // Restore main display + built-in disabled state after HiDPI settles
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [self] in
+                // Restore external as main display if it was before
+                if UserDefaults.standard.bool(forKey: "external_is_main") {
+                    for d in getActiveDisplays() where !d.isBuiltin {
+                        NSLog("OpenDisplay: restoring external as main display")
+                        setMainDisplay(d.modeTargetID)
+                        break
+                    }
+                }
+                // Re-disable built-in if user had it disabled
+                if builtinShouldBeDisabled {
+                    NSLog("OpenDisplay: re-disabling built-in display (user preference)")
+                    _ = setDisplayEnabled(1, enabled: false)
+                }
             }
         }
     }

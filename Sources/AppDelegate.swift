@@ -156,6 +156,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func onSetMainDisplay(_ sender: NSMenuItem) {
         guard let display = sender.representedObject as? DisplayInfo else { return }
         dm.setMainDisplay(display.modeTargetID)
+        // Save preference: external display should be main
+        if !display.isBuiltin {
+            UserDefaults.standard.set(true, forKey: "external_is_main")
+        } else {
+            UserDefaults.standard.set(false, forKey: "external_is_main")
+        }
     }
 
     @objc private func onSwitchMode(_ sender: NSMenuItem) {
