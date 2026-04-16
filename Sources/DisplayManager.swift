@@ -54,11 +54,17 @@ class DisplayManager {
     /// Track displays we disabled, with whether they were built-in at capture time
     var capturedDisplays: [CGDirectDisplayID: Bool] = [:]  // displayID -> isBuiltin
 
+    /// Debounce timer for main display restoration
+    private var mainDisplayTimer: DispatchWorkItem?
+
     init() {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             self?.modeCacheDirty = true
             self?.modeCache.removeAll()
+
+            // Debounced main display check — runs 4s after the LAST config change
+            self?.scheduleMainDisplayCheck()
 
             let cleanedPhysicalIDs = VirtualDisplayHelper.cleanupDisconnectedDisplays() as? [NSNumber] ?? []
 
@@ -157,7 +163,7 @@ class DisplayManager {
         }
     }
 
-    /// Reapply saved display modes after wake — macOS may reset them
+    /// Reapply saved display modes and main display preference after wake
     private func reapplySavedModes() {
         for display in getActiveDisplays() {
             if display.isBuiltin { continue }
@@ -182,6 +188,37 @@ class DisplayManager {
                 }
             }
         }
+
+        // Restore main display preference
+        if UserDefaults.standard.bool(forKey: "external_is_main") {
+            for d in getActiveDisplays() where !d.isBuiltin {
+                if !d.isMain {
+                    NSLog("OpenDisplay: wake — restoring external as main display")
+                    setMainDisplay(d.modeTargetID)
+                }
+                break
+            }
+        }
+    }
+
+    /// Debounced main display check — waits for display config to settle,
+    /// then restores external as main if the user preference says so.
+    /// Each call cancels the previous timer, so rapid config changes only trigger once.
+    private func scheduleMainDisplayCheck() {
+        mainDisplayTimer?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard UserDefaults.standard.bool(forKey: "external_is_main") else { return }
+            for d in getActiveDisplays() where !d.isBuiltin {
+                if !d.isMain {
+                    NSLog("OpenDisplay: restoring external as main display (debounced)")
+                    setMainDisplay(d.modeTargetID)
+                }
+                break
+            }
+        }
+        mainDisplayTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0, execute: work)
     }
 
     // MARK: Enumeration
