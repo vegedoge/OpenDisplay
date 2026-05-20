@@ -70,18 +70,15 @@ class DisplayManager {
 
             if !cleanedPhysicalIDs.isEmpty {
                 let physIDs = cleanedPhysicalIDs.map { $0.uint32Value }
-                // Virtual display was removed (external went offline).
-                // Wait 3s then check: if that specific physical display didn't come back,
-                // re-enable built-in. During sleep, asyncAfter is paused — it only fires
-                // after wake, at which point the external is back online → built-in stays off.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-                    self?.reenableBuiltinIfExternalGone(physicalIDs: physIDs)
-                }
+                // Virtual display was removed (external went offline). Poll every
+                // 200ms for up to 1s: if the physical comes back (sleep/wake), abort
+                // and keep built-in disabled; if it stays gone, re-enable built-in.
+                // During sleep, asyncAfter pauses — polling resumes on wake, sees the
+                // (reconnected) external, and bails.
+                self?.pollForReenableBuiltin(physicalIDs: physIDs, attempts: 0)
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                self?.restoreHiDPIForReconnectedDisplays()
-            }
+            self?.pollForReconnectedDisplays(attempts: 0)
         }
 
         // On wake: reapply saved modes (macOS may have reset them)
@@ -96,23 +93,54 @@ class DisplayManager {
         }
     }
 
-    /// Re-enable built-in display if no external display is active.
-    /// Called with delay after cleanup — if system was just sleeping,
-    /// external will be back by now so this is a no-op.
-    /// Check if the specific physical displays that went offline are still gone.
-    /// If they are, re-enable built-in. If they came back (sleep/wake), do nothing.
-    private func reenableBuiltinIfExternalGone(physicalIDs: [UInt32]) {
-        let onlineIDs = Set(getOnlineDisplayIDs())
+    /// Poll for the disconnected physical display to come back. Re-enables built-in
+    /// only if it stays gone for the full 1s budget. Aborts immediately if it returns.
+    private func pollForReenableBuiltin(physicalIDs: [UInt32], attempts: Int) {
+        let kMaxAttempts = 5
+        let kInterval = 0.2
 
+        let onlineIDs = Set(getOnlineDisplayIDs())
         let anyPhysicalBack = physicalIDs.contains { onlineIDs.contains($0) }
 
-        NSLog("OpenDisplay: reenableCheck — looking for physical \(physicalIDs), online=\(Array(onlineIDs)), back=\(anyPhysicalBack)")
-
         if anyPhysicalBack {
-            NSLog("OpenDisplay: physical display reconnected (sleep/wake), keeping built-in disabled")
-        } else {
-            NSLog("OpenDisplay: physical display truly gone, re-enabling built-in")
+            NSLog("OpenDisplay: physical display reconnected after \(attempts * 200)ms, keeping built-in disabled")
+            return
+        }
+
+        if attempts >= kMaxAttempts {
+            NSLog("OpenDisplay: physical display truly gone after \(attempts * 200)ms, re-enabling built-in")
             _ = setDisplayEnabled(1, enabled: true)
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + kInterval) { [weak self] in
+            self?.pollForReenableBuiltin(physicalIDs: physicalIDs, attempts: attempts + 1)
+        }
+    }
+
+    /// Poll for a reconnected external display whose HiDPI state we should restore.
+    /// Fires immediately and every 100ms (up to 1.5s budget) until a saved external
+    /// shows up in the active display list with HiDPI off — then restores it.
+    /// Replaces the previous fixed 1.0s wait, so HiDPI kicks in as soon as macOS
+    /// has the new display registered (often <300ms).
+    private func pollForReconnectedDisplays(attempts: Int) {
+        let kMaxAttempts = 15
+        let savedHiDPI = UserDefaults.standard.stringArray(forKey: "hidpi_displays") ?? []
+
+        let needsRestore = getActiveDisplays().contains { d in
+            !d.isBuiltin && savedHiDPI.contains(displayKey(d)) && !isHiDPIEnabled(for: d.physicalID)
+        }
+
+        if needsRestore {
+            NSLog("OpenDisplay: reconnected display ready after \(attempts * 100)ms, restoring HiDPI")
+            restoreHiDPIForReconnectedDisplays()
+            return
+        }
+
+        if attempts >= kMaxAttempts { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.pollForReconnectedDisplays(attempts: attempts + 1)
         }
     }
 

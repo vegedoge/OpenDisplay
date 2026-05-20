@@ -141,11 +141,16 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
     fprintf(stderr, "OpenDisplay: virtual display %u created for physical %u (%ux%u)\n",
             virtualID, physicalID, width, height);
 
-    // Delay mirroring — the system needs time to register the virtual display
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
+    // Poll until mirror config succeeds — the system needs time to register
+    // the virtual display before mirror config will take effect. Retry every
+    // 100ms up to 15 attempts (1.5s budget), then fall back to permanent config.
+    __block int attempts = 0;
+    __block void (^tryMirror)(void) = nil;
+    const int kMaxAttempts = 15;
+    const double kRetryInterval = 0.1;
+    tryMirror = ^{
+        attempts++;
         CGDirectDisplayID vid = [vd displayID];
-        fprintf(stderr, "OpenDisplay: setting up mirror physical=%u -> virtual=%u\n", physicalID, vid);
 
         // Save all OTHER displays' origins so they don't move
         uint32_t dcount = 0;
@@ -163,8 +168,14 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
         CGDisplayConfigRef config = NULL;
         CGError err = CGBeginDisplayConfiguration(&config);
         if (err != kCGErrorSuccess) {
-            fprintf(stderr, "OpenDisplay: CGBeginDisplayConfiguration failed: %d\n", err);
+            fprintf(stderr, "OpenDisplay: CGBeginDisplayConfiguration failed: %d (attempt %d)\n", err, attempts);
             free(dids); free(origins);
+            if (attempts < kMaxAttempts) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRetryInterval * NSEC_PER_SEC)),
+                               dispatch_get_main_queue(), tryMirror);
+            } else {
+                tryMirror = nil;
+            }
             return;
         }
 
@@ -178,22 +189,47 @@ static NSMutableDictionary<NSNumber *, NSString *> *_nameMap;
         }
 
         err = CGCompleteDisplayConfiguration(config, kCGConfigureForSession);
-        fprintf(stderr, "OpenDisplay: mirror config result: %d\n", err);
 
-        if (err != kCGErrorSuccess) {
-            CGBeginDisplayConfiguration(&config);
-            CGConfigureDisplayMirrorOfDisplay(config, physicalID, vid);
-            for (uint32_t i = 0; i < dcount; i++) {
-                if (origins[i].did != physicalID && origins[i].did != vid) {
-                    CGConfigureDisplayOrigin(config, origins[i].did, origins[i].x, origins[i].y);
-                }
-            }
-            err = CGCompleteDisplayConfiguration(config, kCGConfigurePermanently);
-            fprintf(stderr, "OpenDisplay: mirror config (permanent) result: %d\n", err);
+        if (err == kCGErrorSuccess) {
+            fprintf(stderr, "OpenDisplay: mirror configured physical=%u -> virtual=%u on attempt %d (%.0fms)\n",
+                    physicalID, vid, attempts, attempts * kRetryInterval * 1000.0);
+            free(dids); free(origins);
+            tryMirror = nil;
+            return;
         }
 
         free(dids); free(origins);
-    });
+
+        if (attempts < kMaxAttempts) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRetryInterval * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), tryMirror);
+            return;
+        }
+
+        // Exhausted retries — fall back to permanent config
+        fprintf(stderr, "OpenDisplay: mirror config exhausted %d attempts (last err=%d), trying permanent\n",
+                attempts, err);
+        uint32_t dcount2 = 0;
+        CGGetActiveDisplayList(0, NULL, &dcount2);
+        uint32_t *dids2 = calloc(dcount2, sizeof(uint32_t));
+        CGGetActiveDisplayList(dcount2, dids2, &dcount2);
+
+        CGBeginDisplayConfiguration(&config);
+        CGConfigureDisplayMirrorOfDisplay(config, physicalID, vid);
+        for (uint32_t i = 0; i < dcount2; i++) {
+            if (dids2[i] != physicalID && dids2[i] != vid) {
+                CGRect bounds = CGDisplayBounds(dids2[i]);
+                CGConfigureDisplayOrigin(config, dids2[i], (int32_t)bounds.origin.x, (int32_t)bounds.origin.y);
+            }
+        }
+        err = CGCompleteDisplayConfiguration(config, kCGConfigurePermanently);
+        fprintf(stderr, "OpenDisplay: mirror config (permanent) result: %d\n", err);
+        free(dids2);
+        tryMirror = nil;
+    };
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), tryMirror);
 
     return virtualID;
 }
