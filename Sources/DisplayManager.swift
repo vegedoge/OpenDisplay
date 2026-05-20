@@ -63,7 +63,7 @@ class DisplayManager {
             self?.modeCacheDirty = true
             self?.modeCache.removeAll()
 
-            // Debounced main display check — runs 4s after the LAST config change
+            // Debounced main display check — runs 1.5s after the LAST config change
             self?.scheduleMainDisplayCheck()
 
             let cleanedPhysicalIDs = VirtualDisplayHelper.cleanupDisconnectedDisplays() as? [NSNumber] ?? []
@@ -79,7 +79,7 @@ class DisplayManager {
                 }
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.restoreHiDPIForReconnectedDisplays()
             }
         }
@@ -145,7 +145,7 @@ class DisplayManager {
 
         if didRestoreExternal {
             // Restore main display + built-in disabled state after HiDPI settles
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [self] in
                 // Restore external as main display if it was before
                 if UserDefaults.standard.bool(forKey: "external_is_main") {
                     for d in getActiveDisplays() where !d.isBuiltin {
@@ -218,7 +218,7 @@ class DisplayManager {
             }
         }
         mainDisplayTimer = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
     }
 
     // MARK: Enumeration
